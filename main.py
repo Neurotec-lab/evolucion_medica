@@ -29,7 +29,7 @@ def load_patient_database():
         "Alergias", "Tabaquismo", "Medicamentos", "Antiagregantes plaquetarios", "Anticoagulantes",
         "Antecedentes mórbidos", "Temperatura", "Presión arterial", "Saturación O2",
         "Anamnesis", "Examen físico", "Escala de Glasgow", "Hemiparesia", "Paraparesia",
-        "Focalidad", "Plan", "Reposo", "Tromboprofilaxis farmacológica", "Hidratación",
+        "Focalidad", "Exámenes","Plan", "Reposo", "Tromboprofilaxis farmacológica", "Hidratación",
         "Régimen nutricional", "Equipo multidisciplinario", "Antibiótico 1",
         "Fecha de inicio Antibiotico 1", "Días de antibiótico 1", "Antibiótico 2",
         "Fecha de inicio Antibiotico 2", "Días de antibiótico 2", "Retiro sonda foley",
@@ -149,7 +149,7 @@ def create_word_document(data):
     sections = {
         "Información del Paciente": ["Sexo","Edad","Fecha de ingreso", "Días de hospitalización","Alergias","Domicilio"],
         "Diagnóstico": ["Diagnostico", "Antecedentes mórbidos"],
-        "Evaluación clínica": ["Temperatura", "Presión arterial", "Saturación O2","Examen físico","Escala de Glasgow", "Hemiparesia","Paraparesia","Focalidad"],
+        "Evaluación clínica": ["Temperatura", "Presión arterial", "Saturación O2","Examen físico","Escala de Glasgow", "Hemiparesia","Paraparesia","Focalidad","Exámenes"],
         "Tratamiento": ["Reposo", "Tromboprofilaxis farmacológica", "Régimen nutricional", "Hidratación","Equipo multidisciplinario"],
         "Indicaciones enfermería": ["Retiro sonda foley", "Retiro de CVC", "Curación por enfermería", "Instalación sonda nasogástrica", "Oxigenoterapia", "Exámenes de laboratorio", "Hemoglucotest","Precauciones"],
         "Firma médico": ["Firma médico"]
@@ -475,7 +475,7 @@ def main():
             paraparesia_selections[option] = st.checkbox(option)
     with col3:
         focalidad=st.text_input("Focalidad neurológica:")
-
+    examenes = st.text_area("Exámenes")
 
     # Additional Details section
     st.subheader("Diagnóstico")
@@ -576,6 +576,7 @@ def main():
             "Hemiparesia": hemiparesia_str,
             "Paraparesia": paraparesia_str,
             "Focalidad": focalidad,
+            "Exámenes": examenes,
             "Diagnostico": diagnostico,
             "Plan": plan,
             "Reposo": reposo,
