@@ -14,24 +14,6 @@ import socket
 import requests
 PATIENT_DB_FILE = "patient_database.csv"
 
-def get_ip_and_location():
-    try:
-        response = requests.get('https://ipinfo.io/json')
-        if response.status_code == 200:
-            data = response.json()
-            ip = data.get('ip', 'Unknown')
-            city = data.get('city', 'Unknown')
-            region = data.get('region', 'Unknown')
-            country = data.get('country', 'Unknown')
-            location = f"{city}, {region}, {country}"
-        else:
-            ip = "Unknown"
-            location = "Unknown"
-    except:
-        ip = "Unknown"
-        location = "Unknown"
-    return ip, location
-
 def parse_date(date_string):
     if pd.isna(date_string) or date_string == 'N/A' or date_string == '':
         return pd.NaT
@@ -340,8 +322,7 @@ def create_word_document(data):
                 doc.add_paragraph()
     footer = section.footer
     footer_paragraph = footer.paragraphs[0]
-    ip, location = get_ip_and_location()
-    footer_text = f"Unidad de neurocirugía, Hospital de Curicó | IP: {ip} | Ubicación: {location}"
+    footer_text = f"Unidad de neurocirugía, Hospital de Curicó"
     footer_paragraph.text = footer_text
     footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     footer_run = footer_paragraph.runs[0]
