@@ -374,40 +374,32 @@ def validate_form(data):
 
 
 def main():
-    st.set_page_config(page_title="Evolución médica", layout="wide")
+    st.set_page_config(page_title="Evolución médica", layout="centered")
     st.title("Evolución médica neurocirugía")
-
     # Use Chile time zone for current date
     chile_tz = ZoneInfo("America/Santiago")
     current_date = st.date_input("Fecha actual", value=datetime.now(chile_tz).date())
 
     # Load patient database
     patient_df = load_patient_database()
-
-    # Initialize patient_info
-    patient_info = {}
-
     # Patient Information section
     st.subheader("Información del Paciente")
     rut = st.text_input("Rut")
-
     if rut:
-        patient_info = lookup_patient(rut, patient_df) or {}
+        patient_info = lookup_patient(rut, patient_df)
         if patient_info:
-            name = st.text_input("Nombre", value=patient_info.get("Nombre", ""), disabled=True)
-            age = st.number_input("Edad", value=patient_info.get("Edad", 0), disabled=True)
+            name = st.text_input("Nombre", value=patient_info["Nombre"], disabled=True)
+            age = st.number_input("Edad", value=patient_info["Edad"], disabled=True)
             gender = st.selectbox("Sexo", ["Masculino", "Femenino"],
-                                  index=["Masculino", "Femenino"].index(patient_info.get("Sexo", "Masculino")))
+                                  index=["Masculino", "Femenino"].index(patient_info["Sexo"]), disabled=True)
             domicilio = st.selectbox("Domicilio",
                                      ["Curicó", "Molina", "Sagrada Familia", 'Romeral', 'Hualañe', 'Licantén',
-                                      'Rauco', 'Teno', 'Vichuquén', 'Otro'],
+                                      'Rauco',
+                                      'Teno', 'Vichuquén', 'Otro'],
                                      index=["Curicó", "Molina", "Sagrada Familia", 'Romeral', 'Hualañe', 'Licantén',
-                                            'Rauco', 'Teno', 'Vichuquén', 'Otro'].index(
-                                         patient_info.get("Domicilio", "Curicó")))
-            admission_date = st.date_input("Fecha de ingreso",
-                                           value=pd.to_datetime(
-                                               patient_info.get("Fecha de ingreso")).date() if pd.notna(
-                                               patient_info.get("Fecha de ingreso")) else None)
+                                            'Rauco',
+                                            'Teno', 'Vichuquén', 'Otro'].index(patient_info["Domicilio"]))
+            admission_date = st.date_input("Fecha de ingreso", value=patient_info["Fecha de ingreso"].date() if pd.notna(patient_info["Fecha de ingreso"]) else None)
         else:
             st.warning("Paciente no encontrado. Por favor, ingrese la información manualmente.")
             name = st.text_input("Nombre")
@@ -415,7 +407,8 @@ def main():
             gender = st.selectbox("Sexo", ["Masculino", "Femenino"])
             domicilio = st.selectbox("Domicilio",
                                      ["Curicó", "Molina", "Sagrada Familia", 'Romeral', 'Hualañe', 'Licantén',
-                                      'Rauco', 'Teno', 'Vichuquén', 'Otro'])
+                                      'Rauco',
+                                      'Teno', 'Vichuquén', 'Otro'])
             admission_date = st.date_input("Fecha de ingreso")
     else:
         name = st.text_input("Nombre")
@@ -425,19 +418,15 @@ def main():
                                  ["Curicó", "Molina", "Sagrada Familia", 'Romeral', 'Hualañe', 'Licantén', 'Rauco',
                                   'Teno', 'Vichuquén', 'Otro'])
         admission_date = st.date_input("Fecha de ingreso")
-
     # Medical Details section
     st.subheader("Antecedentes médicos")
     col1, col2 = st.columns(2)
     with col1:
-        alergias = st.text_input("Alergias", value=patient_info.get("Alergias", ""))
-        tabaquismo = st.selectbox("Tabaquismo", ["No", "Si"],
-                                  index=["No", "Si"].index(patient_info.get("Tabaquismo", "No")))
-        fármacos = st.text_input("Medicamentos crónicos", value=patient_info.get("Medicamentos", ""))
-        aspirina = st.selectbox("Antiagregantes plaquetarios", ["No", "Si"],
-                                index=["No", "Si"].index(patient_info.get("Antiagregantes plaquetarios", "No")))
-        taco = st.selectbox("Anticoagulantes", ["No", "Si"],
-                            index=["No", "Si"].index(patient_info.get("Anticoagulantes", "No")))
+        alergias = st.text_input("Alergias")
+        tabaquismo = st.selectbox("Tabaquismo", ["No", "Si"])
+        fármacos = st.text_input("Medicamentos crónicos")
+        aspirina = st.selectbox("Antiagregantes plaquetarios", ["No", "Si"])
+        taco = st.selectbox("Anticoagulantes", ["No", "Si"])
 
     with col2:
         st.write("Antecedentes mórbidos")
@@ -445,10 +434,8 @@ def main():
                             "Enfermedad renal crónica", "EPOC", "Asma Bronquial", "Daño hepático crónico",
                             "Cardiopatía Coronaria", "Insuficiencia cardíaca", "Arritmia"]
         morbidos_selections = {}
-        saved_morbidos = patient_info.get("Antecedentes mórbidos", "").split(", ") if patient_info.get(
-            "Antecedentes mórbidos") else []
         for option in morbidos_options:
-            morbidos_selections[option] = st.checkbox(option, value=option in saved_morbidos)
+            morbidos_selections[option] = st.checkbox(option)
 
     st.subheader("Evaluación clínica")
     col1, col2, col3 = st.columns(3)
