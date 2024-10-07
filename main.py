@@ -128,7 +128,7 @@ def create_word_document(data):
     # Set default paragraph format
     style = doc.styles['Normal']
     style.font.name = 'Arial'
-    style.font.size = Pt(9)
+    style.font.size = Pt(12)
     style.paragraph_format.line_spacing_rule = WD_LINE_SPACING.ONE_POINT_FIVE
     style.paragraph_format.space_after = Pt(0)
 
@@ -138,12 +138,12 @@ def create_word_document(data):
     current_time = now.strftime("%H:%M")
     title = doc.add_paragraph("Evolución médica neurocirugía")
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title.runs[0].font.size = Pt(9)
+    title.runs[0].font.size = Pt(14)
     title.runs[0].font.bold = True
 
     subtitle = doc.add_paragraph(f"{data['Nombre']} , {data['Rut']} , fecha: {data['Fecha']},hora: {current_time}\n")
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.runs[0].font.size = Pt(9)
+    subtitle.runs[0].font.size = Pt(14)
 
     # Define sections and their corresponding fields
     sections = {
