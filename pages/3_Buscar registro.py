@@ -5,7 +5,7 @@ from datetime import datetime
 import re
 
 # Constants
-PATIENT_DB_FILE = "patient_database.csv"
+PATIENT_DB_FILE = "../patient_database.csv"
 REPORTS_DIRECTORY = os.path.join(os.path.dirname(__file__), "..", "reports")
 
 
@@ -53,13 +53,13 @@ def find_patient_reports(patient_name):
 
 
 def main():
-    st.title("Patient Report Search")
+    st.title("Buscador de registros clínicos")
 
     patient_df = load_patient_database()
 
-    rut = st.text_input("Enter patient RUT:")
+    rut = st.text_input("Ingresar RUT:")
 
-    if st.button("Search"):
+    if st.button("Buscar"):
         if rut:
             patient = patient_df[patient_df["Rut"] == rut]
 

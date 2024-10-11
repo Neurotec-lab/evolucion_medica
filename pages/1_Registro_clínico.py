@@ -10,27 +10,12 @@ import os
 import csv
 import pandas as pd
 from zoneinfo import ZoneInfo
+from io import BytesIO
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import socket
 import requests
-PATIENT_DB_FILE = "patient_database.csv"
-
-def get_ip_and_location():
-    try:
-        response = requests.get('https://ipinfo.io/json')
-        if response.status_code == 200:
-            data = response.json()
-            ip = data.get('ip', 'Unknown')
-            city = data.get('city', 'Unknown')
-            region = data.get('region', 'Unknown')
-            country = data.get('country', 'Unknown')
-            location = f"{city}, {region}, {country}"
-        else:
-            ip = "Unknown"
-            location = "Unknown"
-    except:
-        ip = "Unknown"
-        location = "Unknown"
-    return ip, location
+PATIENT_DB_FILE = "../patient_database.csv"
 
 def parse_date(date_string):
     if pd.isna(date_string) or date_string == 'N/A' or date_string == '':
@@ -47,7 +32,7 @@ def load_patient_database():
         "Alergias", "Tabaquismo", "Medicamentos", "Antiagregantes plaquetarios", "Anticoagulantes",
         "Antecedentes mórbidos", "Temperatura", "Presión arterial", "Saturación O2",
         "Anamnesis", "Examen físico", "Escala de Glasgow", "Hemiparesia", "Paraparesia",
-        "Focalidad", "Plan", "Reposo", "Tromboprofilaxis farmacológica", "Hidratación",
+        "Focalidad", "Fecha de exámenes", "PCR", "Leucocitos", "Hematocrito", "Natremia", "Otros exámenes","Plan", "Reposo", "Tromboprofilaxis farmacológica", "Hidratación",
         "Régimen nutricional", "Equipo multidisciplinario", "Antibiótico 1",
         "Fecha de inicio Antibiotico 1", "Días de antibiótico 1", "Antibiótico 2",
         "Fecha de inicio Antibiotico 2", "Días de antibiótico 2", "Retiro sonda foley",
@@ -146,7 +131,7 @@ def create_word_document(data):
     # Set default paragraph format
     style = doc.styles['Normal']
     style.font.name = 'Arial'
-    style.font.size = Pt(9)
+    style.font.size = Pt(10)
     style.paragraph_format.line_spacing_rule = WD_LINE_SPACING.ONE_POINT_FIVE
     style.paragraph_format.space_after = Pt(0)
 
@@ -156,18 +141,19 @@ def create_word_document(data):
     current_time = now.strftime("%H:%M")
     title = doc.add_paragraph("Evolución médica neurocirugía")
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title.runs[0].font.size = Pt(9)
+    title.runs[0].font.size = Pt(12)
     title.runs[0].font.bold = True
 
     subtitle = doc.add_paragraph(f"{data['Nombre']} , {data['Rut']} , fecha: {data['Fecha']},hora: {current_time}\n")
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.runs[0].font.size = Pt(9)
+    subtitle.runs[0].font.size = Pt(12)
 
     # Define sections and their corresponding fields
     sections = {
         "Información del Paciente": ["Sexo","Edad","Fecha de ingreso", "Días de hospitalización","Alergias","Domicilio"],
         "Diagnóstico": ["Diagnostico", "Antecedentes mórbidos"],
-        "Evaluación clínica": ["Temperatura", "Presión arterial", "Saturación O2","Examen físico","Escala de Glasgow", "Hemiparesia","Paraparesia","Focalidad"],
+        "Comentario clínico": ["Anamnesis"],
+        "Evaluación clínica": ["Temperatura", "Presión arterial", "Saturación O2","Examen físico","Escala de Glasgow", "Hemiparesia","Paraparesia","Focalidad","Exámenes"],
         "Tratamiento": ["Reposo", "Tromboprofilaxis farmacológica", "Régimen nutricional", "Hidratación","Equipo multidisciplinario"],
         "Indicaciones enfermería": ["Retiro sonda foley", "Retiro de CVC", "Curación por enfermería", "Instalación sonda nasogástrica", "Oxigenoterapia", "Exámenes de laboratorio", "Hemoglucotest","Precauciones"],
         "Firma médico": ["Firma médico"]
@@ -176,7 +162,26 @@ def create_word_document(data):
     for section_title, fields in sections.items():
         # Add section title
         doc.add_paragraph().add_run(section_title).bold = True
+        if section_title == "Comentario clínico":
+            # Create a single-column table for anamnesis
+            anamnesis_table = doc.add_table(rows=1, cols=1)
+            anamnesis_table.style = 'Table Grid'
+            anamnesis_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            anamnesis_table.columns[0].width = Inches(7.5)  # Full width of the page
 
+            anamnesis_cell = anamnesis_table.cell(0, 0)
+            p = anamnesis_cell.paragraphs[0]
+            p.add_run("Anamnesis: ").bold = True
+            p.add_run(data.get("Anamnesis", ""))
+
+            # Apply smaller font size to anamnesis table contents
+            for paragraph in anamnesis_cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(8)
+
+            # Add space after anamnesis table
+            doc.add_paragraph()
+            continue
         # Create a 2-column table
         table = doc.add_table(rows=1, cols=2)
         table.style = 'Table Grid'
@@ -189,6 +194,7 @@ def create_word_document(data):
         row_cells = table.rows[0].cells
 
         for i, field in enumerate(fields):
+
             if i % 2 == 0 and i > 0:
                 # Add a new row for every two fields
                 row_cells = table.add_row().cells
@@ -338,10 +344,10 @@ def create_word_document(data):
 
                 # Add space after antibiotic table
                 doc.add_paragraph()
+
     footer = section.footer
     footer_paragraph = footer.paragraphs[0]
-    ip, location = get_ip_and_location()
-    footer_text = f"Unidad de neurocirugía, Hospital de Curicó | IP: {ip} | Ubicación: {location}"
+    footer_text = f"Unidad de neurocirugía, Hospital de Curicó"
     footer_paragraph.text = footer_text
     footer_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     footer_run = footer_paragraph.runs[0]
@@ -374,32 +380,40 @@ def validate_form(data):
 
 
 def main():
-    st.set_page_config(page_title="Evolución médica", layout="centered")
+    st.set_page_config(page_title="Evolución médica", layout="wide")
     st.title("Evolución médica neurocirugía")
+
     # Use Chile time zone for current date
     chile_tz = ZoneInfo("America/Santiago")
     current_date = st.date_input("Fecha actual", value=datetime.now(chile_tz).date())
 
     # Load patient database
     patient_df = load_patient_database()
+
+    # Initialize patient_info
+    patient_info = {}
+
     # Patient Information section
     st.subheader("Información del Paciente")
     rut = st.text_input("Rut")
+
     if rut:
-        patient_info = lookup_patient(rut, patient_df)
+        patient_info = lookup_patient(rut, patient_df) or {}
         if patient_info:
-            name = st.text_input("Nombre", value=patient_info["Nombre"], disabled=True)
-            age = st.number_input("Edad", value=patient_info["Edad"], disabled=True)
+            name = st.text_input("Nombre", value=patient_info.get("Nombre", ""), disabled=True)
+            age = st.number_input("Edad", value=patient_info.get("Edad", 0), disabled=True)
             gender = st.selectbox("Sexo", ["Masculino", "Femenino"],
-                                  index=["Masculino", "Femenino"].index(patient_info["Sexo"]), disabled=True)
+                                  index=["Masculino", "Femenino"].index(patient_info.get("Sexo", "Masculino")))
             domicilio = st.selectbox("Domicilio",
                                      ["Curicó", "Molina", "Sagrada Familia", 'Romeral', 'Hualañe', 'Licantén',
-                                      'Rauco',
-                                      'Teno', 'Vichuquén', 'Otro'],
+                                      'Rauco', 'Teno', 'Vichuquén', 'Otro'],
                                      index=["Curicó", "Molina", "Sagrada Familia", 'Romeral', 'Hualañe', 'Licantén',
-                                            'Rauco',
-                                            'Teno', 'Vichuquén', 'Otro'].index(patient_info["Domicilio"]))
-            admission_date = st.date_input("Fecha de ingreso", value=patient_info["Fecha de ingreso"].date() if pd.notna(patient_info["Fecha de ingreso"]) else None)
+                                            'Rauco', 'Teno', 'Vichuquén', 'Otro'].index(
+                                         patient_info.get("Domicilio", "Curicó")))
+            admission_date = st.date_input("Fecha de ingreso",
+                                           value=pd.to_datetime(
+                                               patient_info.get("Fecha de ingreso")).date() if pd.notna(
+                                               patient_info.get("Fecha de ingreso")) else None)
         else:
             st.warning("Paciente no encontrado. Por favor, ingrese la información manualmente.")
             name = st.text_input("Nombre")
@@ -407,8 +421,7 @@ def main():
             gender = st.selectbox("Sexo", ["Masculino", "Femenino"])
             domicilio = st.selectbox("Domicilio",
                                      ["Curicó", "Molina", "Sagrada Familia", 'Romeral', 'Hualañe', 'Licantén',
-                                      'Rauco',
-                                      'Teno', 'Vichuquén', 'Otro'])
+                                      'Rauco', 'Teno', 'Vichuquén', 'Otro'])
             admission_date = st.date_input("Fecha de ingreso")
     else:
         name = st.text_input("Nombre")
@@ -418,15 +431,19 @@ def main():
                                  ["Curicó", "Molina", "Sagrada Familia", 'Romeral', 'Hualañe', 'Licantén', 'Rauco',
                                   'Teno', 'Vichuquén', 'Otro'])
         admission_date = st.date_input("Fecha de ingreso")
+
     # Medical Details section
     st.subheader("Antecedentes médicos")
     col1, col2 = st.columns(2)
     with col1:
-        alergias = st.text_input("Alergias")
-        tabaquismo = st.selectbox("Tabaquismo", ["No", "Si"])
-        fármacos = st.text_input("Medicamentos crónicos")
-        aspirina = st.selectbox("Antiagregantes plaquetarios", ["No", "Si"])
-        taco = st.selectbox("Anticoagulantes", ["No", "Si"])
+        alergias = st.text_input("Alergias", value=patient_info.get("Alergias", ""))
+        tabaquismo = st.selectbox("Tabaquismo", ["No", "Si"],
+                                  index=["No", "Si"].index(patient_info.get("Tabaquismo", "No")))
+        fármacos = st.text_input("Medicamentos crónicos", value=patient_info.get("Medicamentos", ""))
+        aspirina = st.selectbox("Antiagregantes plaquetarios", ["No", "Si"],
+                                index=["No", "Si"].index(patient_info.get("Antiagregantes plaquetarios", "No")))
+        taco = st.selectbox("Anticoagulantes", ["No", "Si"],
+                            index=["No", "Si"].index(patient_info.get("Anticoagulantes", "No")))
 
     with col2:
         st.write("Antecedentes mórbidos")
@@ -434,8 +451,10 @@ def main():
                             "Enfermedad renal crónica", "EPOC", "Asma Bronquial", "Daño hepático crónico",
                             "Cardiopatía Coronaria", "Insuficiencia cardíaca", "Arritmia"]
         morbidos_selections = {}
+        saved_morbidos = patient_info.get("Antecedentes mórbidos", "").split(", ") if patient_info.get(
+            "Antecedentes mórbidos") else []
         for option in morbidos_options:
-            morbidos_selections[option] = st.checkbox(option)
+            morbidos_selections[option] = st.checkbox(option, value=option in saved_morbidos)
 
     st.subheader("Evaluación clínica")
     col1, col2, col3 = st.columns(3)
@@ -481,7 +500,21 @@ def main():
             paraparesia_selections[option] = st.checkbox(option)
     with col3:
         focalidad=st.text_input("Focalidad neurológica:")
+    st.subheader("Exámenes")
+    examenes = st.text_area("Exámenes de laboratorio e imagenológicos")
 
+    # New fields for specific tests
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        fecha_examenes = st.date_input("Fecha de exámenes", value=None)
+
+
+    with col2:
+        hematocrito = st.number_input("Hematocrito %", min_value=0.0, max_value=100.0, format="%.1f")
+        leucocitos = st.number_input("Leucocitos /mm3", min_value=0.0, format="%.2f")
+    with col3:
+        natremia = st.number_input("Natremia mEq/L", min_value=0.0, format="%.1f")
+        pcr = st.number_input("PCR (Proteina C Reactiva) mg/dl", min_value=0.0, format="%.2f")
 
     # Additional Details section
     st.subheader("Diagnóstico")
@@ -582,6 +615,12 @@ def main():
             "Hemiparesia": hemiparesia_str,
             "Paraparesia": paraparesia_str,
             "Focalidad": focalidad,
+            "Fecha de exámenes": fecha_examenes.strftime("%d-%m-%Y") if fecha_examenes else "N/A",
+            "PCR": f"{pcr:.2f}",
+            "Leucocitos": f"{leucocitos:.2f}",
+            "Hematocrito": f"{hematocrito:.1f}",
+            "Natremia": f"{natremia:.1f}",
+            "Otros exámenes": examenes,
             "Diagnostico": diagnostico,
             "Plan": plan,
             "Reposo": reposo,
@@ -627,6 +666,8 @@ def main():
             )
         else:
             st.warning("Por favor, complete todos los campos obligatorios antes de guardar.")
+
+        # Add copyright and confidentiality notice
 
 if __name__ == "__main__":
     main()

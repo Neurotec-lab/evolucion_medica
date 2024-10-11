@@ -165,7 +165,7 @@ def create_word_document(data):
 
 
 def main():
-    st.set_page_config(page_title="Evolución médica neurocirugía UPC", layout="centered")
+    st.set_page_config(page_title="Evolución médica neurocirugía UPC", layout="wide")
     st.title("Evolución médica neurocirugía UPC")
 
     patient_df = load_patient_database()
