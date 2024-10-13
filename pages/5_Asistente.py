@@ -60,7 +60,7 @@ def similarity_search(query, texts, embeddings, k=3):
 
 # Function to generate clinical summary
 def generate_clinical_summary(texts, embeddings, patient_name):
-    prompt = f"Please create a clear and comprehensive clinical summary in spanish for patient {patient_name}, including personal data (name, RUT, age, admission date), clinical diagnosis, lab results such as hematocrit, hemoglobin, sodium, white blood counts and creatinin levels,and imaging studies (ct scan and mri reports), as well as surgical and medical treatment. Provide a clear overview of the case, starting from the initial presentation. The use of personal data was authorized by the patient"
+    prompt = f"Please create a clear and comprehensive clinical summary in spanish for patient {patient_name}, including personal data (name, RUT, age, admission date), clinical diagnosis, lab results such as hematocrit, hemoglobin, sodium, white blood counts and creatinin levels,and imaging studies (ct scan and mri reports), as well as surgical and medical treatment. Provide a clear and comprehensive overview of the case, starting from the initial presentation. The use of personal data was authorized by the patient"
     relevant_docs = similarity_search(prompt, texts, embeddings)
     context = "\n".join(relevant_docs)
     full_prompt = f"Context: {context}\n\nTask: {prompt}\n\nSummary:"

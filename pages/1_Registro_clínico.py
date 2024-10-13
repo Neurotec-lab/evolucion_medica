@@ -10,12 +10,80 @@ import os
 import csv
 import pandas as pd
 from zoneinfo import ZoneInfo
+import plotly.graph_objects as go
+import PyPDF2
 from io import BytesIO
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import socket
 import requests
 PATIENT_DB_FILE = "../patient_database.csv"
+
+def reset_form():
+    """Reset all form data in the session state"""
+    keys = list(st.session_state.keys())
+    for key in list(st.session_state.keys()):
+        for key in keys:
+            st.session_state.pop(key)
+
+def create_exam_line_plot(exam_data):
+    df = pd.DataFrame(exam_data)
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.sort_values('date')
+
+    # Define units for each exam type
+    units = {
+        "Hemoglobina": "g/dL",
+        "Hematocrito": "%",
+        "Leucocitos": "/mm³",
+        "Plaquetas": "/mm³",
+        "Creatinina": "mg/dL",
+        "BUN": "mg/dL",
+        "PCR": "mg/L",
+        "Procalcitonina": "ng/mL",
+        "Sodio": "mEq/L"
+    }
+
+    fig = go.Figure()
+
+    for column in df.columns:
+        if column != 'date':
+            fig.add_trace(go.Scatter(
+                x=df['date'],
+                y=df[column],
+                mode='lines+markers',
+                name=f"{column} ({units.get(column, '')})",
+                hovertemplate=f"{column}: %{{y:.2f}} {units.get(column, '')}<extra></extra>"
+            ))
+
+    fig.update_layout(
+        title='Exámenes registro temporal',
+        xaxis_title='Fecha',
+        yaxis_title='Valor',
+        legend_title='Examen',
+        hovermode="x unified",
+        yaxis=dict(title='Valor (ver unidades en leyenda)'),
+        xaxis=dict(
+            rangeselector=dict(
+                buttons=list([
+                    dict(count=7, label="1s", step="day", stepmode="backward"),
+                    dict(count=1, label="1m", step="month", stepmode="backward"),
+                    dict(count=6, label="6m", step="month", stepmode="backward"),
+                    dict(step="all")
+                ])
+            ),
+            rangeslider=dict(visible=False),
+            type="date"
+        )
+    )
+
+    return fig
+
+def dict_to_string(obj):
+    if isinstance(obj, dict):
+        return ', '.join(f"{k}: {dict_to_string(v)}" for k, v in obj.items())
+    elif isinstance(obj, list):
+        return ', '.join(dict_to_string(item) for item in obj)
+    else:
+        return str(obj)
 
 def parse_date(date_string):
     if pd.isna(date_string) or date_string == 'N/A' or date_string == '':
@@ -25,12 +93,14 @@ def parse_date(date_string):
     except:
         return pd.NaT
 
-
+def ensure_reports_folder():
+        if not os.path.exists("reports"):
+            os.makedirs("reports")
 def load_patient_database():
     columns = [
         "Rut", "Nombre", "Edad", "Sexo", "Domicilio", "Fecha de ingreso", "Diagnóstico",
         "Alergias", "Tabaquismo", "Medicamentos", "Antiagregantes plaquetarios", "Anticoagulantes",
-        "Antecedentes mórbidos", "Temperatura", "Presión arterial", "Saturación O2",
+        "Antecedentes mórbidos", "Otra enfermedad","Temperatura", "Frecuencia cardíaca", "Presión arterial", "Saturación O2",
         "Anamnesis", "Examen físico", "Escala de Glasgow", "Hemiparesia", "Paraparesia",
         "Focalidad", "Fecha de exámenes", "PCR", "Leucocitos", "Hematocrito", "Natremia", "Otros exámenes","Plan", "Reposo", "Tromboprofilaxis farmacológica", "Hidratación",
         "Régimen nutricional", "Equipo multidisciplinario", "Antibiótico 1",
@@ -64,12 +134,25 @@ def save_patient_database(df):
         df.to_csv(PATIENT_DB_FILE, index=False)
     except Exception as e:
         st.error(f"Error saving patient database: {str(e)}")
+
+
 def lookup_patient(rut, df):
     patient = df[df["Rut"] == rut]
     if not patient.empty:
-        return patient.iloc[0].to_dict()
-    return None
+        patient_dict = patient.iloc[0].to_dict()
 
+        # Parse the Exámenes field if it exists
+        if 'Exámenes' in patient_dict and patient_dict['Exámenes']:
+            try:
+                exams = eval(patient_dict['Exámenes'])
+                patient_dict['Exámenes'] = exams
+            except:
+                patient_dict['Exámenes'] = []
+        else:
+            patient_dict['Exámenes'] = []
+
+        return patient_dict
+    return None
 
 def add_patient(data, df):
     # Convert date fields to datetime objects
@@ -119,6 +202,7 @@ def save_dict_to_csv(data_dict, filename=None):
         print(f"Error saving CSV file: {e}")
         return None
 
+
 def create_word_document(data):
     doc = Document()
     section = doc.sections[0]
@@ -153,7 +237,7 @@ def create_word_document(data):
         "Información del Paciente": ["Sexo","Edad","Fecha de ingreso", "Días de hospitalización","Alergias","Domicilio"],
         "Diagnóstico": ["Diagnostico", "Antecedentes mórbidos"],
         "Comentario clínico": ["Anamnesis"],
-        "Evaluación clínica": ["Temperatura", "Presión arterial", "Saturación O2","Examen físico","Escala de Glasgow", "Hemiparesia","Paraparesia","Focalidad","Exámenes"],
+        "Evaluación clínica": ["Temperatura","Frecuencia cardíaca", "Presión arterial", "Saturación O2","Examen físico","Escala de Glasgow", "Hemiparesia","Paraparesia","Focalidad","Exámenes de laboratorio","Exámenes imagenológicos"],
         "Tratamiento": ["Reposo", "Tromboprofilaxis farmacológica", "Régimen nutricional", "Hidratación","Equipo multidisciplinario"],
         "Indicaciones enfermería": ["Retiro sonda foley", "Retiro de CVC", "Curación por enfermería", "Instalación sonda nasogástrica", "Oxigenoterapia", "Exámenes de laboratorio", "Hemoglucotest","Precauciones"],
         "Firma médico": ["Firma médico"]
@@ -282,6 +366,20 @@ def create_word_document(data):
 
             # Add space after anamnesis table
             doc.add_paragraph()
+            # Add Exámenes section
+            doc.add_paragraph().add_run("Exámenes").bold = True
+
+            # Add Exámenes de laboratorio
+            if data.get("Exámenes de laboratorio"):
+                doc.add_paragraph().add_run("Exámenes de laboratorio:").bold = True
+                doc.add_paragraph(data["Exámenes de laboratorio"])
+
+            # Add Exámenes imagenológicos
+            if data.get("Exámenes imagenológicos"):
+                doc.add_paragraph().add_run("Exámenes imagenológicos:").bold = True
+                doc.add_paragraph(data["Exámenes imagenológicos"])
+
+            doc.add_paragraph()  # Add space after Exámenes section
 
         # Add separate table for Plan after the Tratamiento section
         if section_title == "Tratamiento":
@@ -360,7 +458,6 @@ def create_word_document(data):
     doc.save(filename)
     return filename
 
-
 def validate_form(data):
     required_fields = [
         "Nombre", "Rut", "Edad", "Sexo", "Domicilio", "Fecha de ingreso",
@@ -382,6 +479,9 @@ def validate_form(data):
 def main():
     st.set_page_config(page_title="Evolución médica", layout="wide")
     st.title("Evolución médica neurocirugía")
+    if st.button("Reiniciar formulario"):
+        reset_form()
+        st.rerun()
 
     # Use Chile time zone for current date
     chile_tz = ZoneInfo("America/Santiago")
@@ -449,20 +549,36 @@ def main():
         st.write("Antecedentes mórbidos")
         morbidos_options = ["Diabetes Mellitus NIR", "Diabetes Mellitus IR", "HTA", "Hipotiroidismo",
                             "Enfermedad renal crónica", "EPOC", "Asma Bronquial", "Daño hepático crónico",
-                            "Cardiopatía Coronaria", "Insuficiencia cardíaca", "Arritmia"]
+                            "Cardiopatía Coronaria", "Insuficiencia cardíaca", "Arritmia", "Trastorno depresivo",
+                            "Otra enfermedad"]
         morbidos_selections = {}
-        saved_morbidos = patient_info.get("Antecedentes mórbidos", "").split(", ") if patient_info.get(
-            "Antecedentes mórbidos") else []
+
+        # Safely get and process the saved morbidos
+        saved_morbidos_raw = patient_info.get("Antecedentes mórbidos", "")
+        if isinstance(saved_morbidos_raw, str):
+            saved_morbidos = saved_morbidos_raw.split(", ")
+        elif isinstance(saved_morbidos_raw, (int, float)):
+            saved_morbidos = [str(saved_morbidos_raw)]
+        else:
+            saved_morbidos = []
+
         for option in morbidos_options:
-            morbidos_selections[option] = st.checkbox(option, value=option in saved_morbidos)
+            morbidos_selections[option] = st.checkbox(option, value=option in saved_morbidos or (option == "Otra enfermedad" and "Otra enfermedad" in patient_info))
+
+        otra_enfermedad = []
+        if morbidos_selections["Otra enfermedad"]:
+            otra_enfermedad = st.text_input("Especifique otra enfermedad:",
+                                            value=patient_info.get("Otra enfermedad", ""))
 
     st.subheader("Evaluación clínica")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3,col4 = st.columns(4)
     with col1:
         temp = st.text_input("Temperatura (grados)")
     with col2:
-        blood_pressure = st.text_input("Presión arterial (sistólica/diastólica)")
+        hear_rate = st.text_input("Frecuencia cardíaca (latidos por minuto)")
     with col3:
+        blood_pressure = st.text_input("Presión arterial (sistólica/diastólica)")
+    with col4:
         sat02 = st.text_input("Saturación O2")
     medical_history = st.text_area("Anamnesis")
     examen_fisico = st.text_area("Exámen físico")
@@ -501,21 +617,66 @@ def main():
     with col3:
         focalidad=st.text_input("Focalidad neurológica:")
     st.subheader("Exámenes")
-    examenes = st.text_area("Exámenes de laboratorio e imagenológicos")
 
-    # New fields for specific tests
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        fecha_examenes = st.date_input("Fecha de exámenes", value=None)
+    # Define the structure for exam data
+    exam_data = {
+        "date": [],
+        "Hemoglobina": [],
+        "Hematocrito": [],
+        "Leucocitos": [],
+        "Plaquetas": [],
+        "Creatinina": [],
+        "BUN": [],
+        "PCR": [],
+        "Procalcitonina": [],
+        "Sodio": []
+    }
 
+    # Load existing data if available
+    if 'exam_data' not in st.session_state:
+        st.session_state.exam_data = exam_data
+    #else:
+    #    exam_data = st.session_state.exam_data
 
-    with col2:
-        hematocrito = st.number_input("Hematocrito %", min_value=0.0, max_value=100.0, format="%.1f")
-        leucocitos = st.number_input("Leucocitos /mm3", min_value=0.0, format="%.2f")
-    with col3:
-        natremia = st.number_input("Natremia mEq/L", min_value=0.0, format="%.1f")
-        pcr = st.number_input("PCR (Proteina C Reactiva) mg/dl", min_value=0.0, format="%.2f")
+    # Convert exam_data to DataFrame, ensuring 'date' is datetime
+    df = pd.DataFrame(exam_data)
+    df['date'] = pd.to_datetime(df['date']).dt.date  # Convert to date
 
+    # Create a data editor for exam results
+    edited_df = st.data_editor(
+        df,
+        num_rows="dynamic",
+        column_config={
+            "date": st.column_config.DateColumn("Fecha", required=True),
+            "Hemoglobina": st.column_config.NumberColumn("Hemoglobina (g/dL)", min_value=0, max_value=30, step=0.1,
+                                                         format="%.1f"),
+            "Hematocrito": st.column_config.NumberColumn("Hematocrito (%)", min_value=0, max_value=100, step=0.1,
+                                                         format="%.1f"),
+            "Leucocitos": st.column_config.NumberColumn("Leucocitos (/mm³)", min_value=0, max_value=1000000, step=100,
+                                                        format="%d"),
+            "Plaquetas": st.column_config.NumberColumn("Plaquetas (/mm³)", min_value=0, max_value=1000000, step=1000,
+                                                       format="%d"),
+            "Creatinina": st.column_config.NumberColumn("Creatinina (mg/dL)", min_value=0, max_value=30, step=0.01,
+                                                        format="%.2f"),
+            "BUN": st.column_config.NumberColumn("BUN (mg/dL)", min_value=0, max_value=200, step=0.1, format="%.1f"),
+            "PCR": st.column_config.NumberColumn("PCR (mg/L)", min_value=0, max_value=500, step=0.01, format="%.2f"),
+            "Procalcitonina": st.column_config.NumberColumn("Procalcitonina (ng/mL)", min_value=0, max_value=100,
+                                                            step=0.01, format="%.2f"),
+            "Sodio": st.column_config.NumberColumn("Sodio (mEq/L)", min_value=0, max_value=200, step=1, format="%d")
+        },
+        hide_index=True,
+    )
+
+    # Update the session state with the edited data
+    st.session_state.exam_data = edited_df.to_dict(orient='list')
+    if not edited_df.empty:
+        st.subheader("Gráfico de Exámenes")
+        fig = create_exam_line_plot(st.session_state.exam_data)
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Text area for additional exam information
+    examenes_laboratorio = st.text_area("Exámenes de laboratorio")
+    examenes_imagenologicos = st.text_area("Exámenes imagenológicos")
     # Additional Details section
     st.subheader("Diagnóstico")
     diagnostico = st.text_area("Diagnóstico")
@@ -527,7 +688,7 @@ def main():
                               ["Absoluto cero grados", 'Absoluto cabecera en 30 grados', 'Absoluto semisentado',
                                "Levantar asisitdo", "Relativo"])
         trombo = st.selectbox("Tromboprofilaxis farmacológica", ["No", "Si"])
-        suero= st.text_input("Hidratación  (ml/lr)")
+        suero= st.text_input("Hidratación  (ml/lr)","Ninguna")
     with col2:
         # Régimen section (nested within col2)
         st.write("Régimen nutricional")
@@ -573,7 +734,12 @@ def main():
         selected_equipo = [option for option, selected in equipo_selections.items() if selected]
         equipo_str = ", ".join(selected_equipo) if selected_equipo else "Ninguno seleccionado"
         selected_morbidos = [option for option, selected in morbidos_selections.items() if selected]
+        # If "Otra enfermedad" is selected and specified, replace it in the list
+        if "Otra enfermedad" in selected_morbidos and otra_enfermedad:
+            selected_morbidos.remove("Otra enfermedad")
+            selected_morbidos.append(otra_enfermedad)
         morbidos_str = ", ".join(selected_morbidos) if selected_morbidos else "Ninguno seleccionado"
+        print(morbidos_str)
         selected_hemiparesia = [option for option, selected in hemiparesia_selections.items() if selected]
         hemiparesia_str = f"{hemiparesia_txt}/" + ", ".join(selected_hemiparesia) if selected_hemiparesia else "Ninguno seleccionado"
         selected_paraparesia = [option for option, selected in paraparesia_selections.items() if selected]
@@ -599,41 +765,40 @@ def main():
             "Domicilio": domicilio,
             "Fecha": current_date.strftime("%d-%m-%Y"),
             "Fecha de ingreso": admission_date.strftime("%d-%m-%Y"),
-            "Días de hospitalización": f"{hospitalization_time} días",
+            "Días de hospitalización": f"{(current_date - admission_date).days} días",
             "Alergias": alergias,
             "Tabaquismo": tabaquismo,
             "Medicamentos": fármacos,
             "Antiagregantes plaquetarios": aspirina,
             "Anticoagulantes": taco,
             "Antecedentes mórbidos": morbidos_str,
+            "Otra enfermedad": otra_enfermedad,
             "Temperatura": f"{temp} grados",
+            "Frecuencia cardíaca": f"{hear_rate} lpm",
             "Presión arterial": blood_pressure,
             "Saturación O2": sat02,
             "Anamnesis": medical_history,
             "Examen físico": examen_fisico,
-            "Escala de Glasgow": glasgow_score,
-            "Hemiparesia": hemiparesia_str,
-            "Paraparesia": paraparesia_str,
+            "Escala de Glasgow": f"Ocular: {next((key for key, value in ocular_selections.items() if value), 'N/A')}, Verbal: {next((key for key, value in verbal_selections.items() if value), 'N/A')}, Motor: {next((key for key, value in motor_selections.items() if value), 'N/A')}",
+            "Hemiparesia": f"{hemiparesia_txt}/" + ", ".join(
+                [option for option, selected in hemiparesia_selections.items() if selected]),
+            "Paraparesia": f"{paraparesia_txt}/" + ", ".join(
+                [option for option, selected in paraparesia_selections.items() if selected]),
             "Focalidad": focalidad,
-            "Fecha de exámenes": fecha_examenes.strftime("%d-%m-%Y") if fecha_examenes else "N/A",
-            "PCR": f"{pcr:.2f}",
-            "Leucocitos": f"{leucocitos:.2f}",
-            "Hematocrito": f"{hematocrito:.1f}",
-            "Natremia": f"{natremia:.1f}",
-            "Otros exámenes": examenes,
             "Diagnostico": diagnostico,
             "Plan": plan,
             "Reposo": reposo,
             "Tromboprofilaxis farmacológica": trombo,
             "Hidratación": suero,
-            "Régimen nutricional": regimen_str,
-            "Equipo multidisciplinario": equipo_str,
+            "Régimen nutricional": ", ".join([option for option, selected in regimen_selections.items() if selected]),
+            "Equipo multidisciplinario": ", ".join(
+                [option for option, selected in equipo_selections.items() if selected]),
             "Antibiótico 1": atb1,
             "Fecha de inicio Antibiotico 1": date_atb1.strftime("%d-%m-%Y") if date_atb1 else "N/A",
-            "Días de antibiótico 1": f"{atb1_time} días" if atb1_time > 0 else "N/A",
+            "Días de antibiótico 1": f"{(current_date - date_atb1).days + 1} días" if atb1 != "Ninguno" and date_atb1 is not None else "N/A",
             "Antibiótico 2": atb2,
             "Fecha de inicio Antibiotico 2": date_atb2.strftime("%d-%m-%Y") if date_atb2 else "N/A",
-            "Días de antibiótico 2":f"{atb2_time} días" if atb2_time > 0 else "N/A",
+            "Días de antibiótico 2": f"{(current_date - date_atb2).days + 1} días" if atb2 != "Ninguno" and date_atb2 is not None else "N/A",
             "Retiro sonda foley": foley,
             "Retiro de CVC": cvc,
             "Curación por enfermería": curacion,
@@ -644,10 +809,39 @@ def main():
             "Exámenes de laboratorio": examenes,
             "Firma médico": firma
         }
-        def ensure_reports_folder():
-            if not os.path.exists("reports"):
-                os.makedirs("reports")
+        exams_data = []
+        if 'exam_data' in st.session_state and isinstance(st.session_state.exam_data, dict):
+            date_entries = st.session_state.exam_data.get('date', [])
+            for i in range(len(date_entries)):
+                date_value = st.session_state.exam_data['date'][i]
+                if pd.notna(date_value):
+                    if isinstance(date_value, (datetime, pd.Timestamp)):
+                        formatted_date = date_value.strftime("%d-%m-%Y")
+                    elif isinstance(date_value, str):
+                        try:
+                            formatted_date = datetime.strptime(date_value, "%Y-%m-%d").strftime("%d-%m-%Y")
+                        except ValueError:
+                            formatted_date = "Invalid Date"
+                    else:
+                        formatted_date = "Unknown Date Format"
+                else:
+                    formatted_date = "N/A"
 
+                exam = {
+                    "Fecha": formatted_date,
+                    "Resultados": {
+                        col: st.session_state.exam_data[col][i]
+                        for col in st.session_state.exam_data.keys()
+                        if col != 'date' and i < len(st.session_state.exam_data[col]) and pd.notna(
+                            st.session_state.exam_data[col][i])
+                    }
+                }
+                exams_data.append(exam)
+
+        # Add processed exam data and otros examenes to the data dictionary
+        data["Exámenes"] = exams_data
+        data["Exámenes de laboratorio"] = examenes_laboratorio
+        data["Exámenes imagenológicos"] = examenes_imagenologicos
         if validate_form(data):
             patient_df = add_patient(data, patient_df)
 
